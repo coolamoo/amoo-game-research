@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>赛车原型 · 直接玩</title>
+<style>
+  :root { --bg:#0e1116; --card:#171c24; --line:#252c37; --fg:#e8edf5; --dim:#8b97a8; --accent:#f0c419; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; padding:24px 18px 48px; background:var(--bg); color:var(--fg);
+         font:16px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+  h1 { font-size:20px; margin:0 0 6px; letter-spacing:.5px; }
+  p.sub { color:var(--dim); font-size:13px; margin:0 0 22px; }
+  a.card { display:block; text-decoration:none; color:inherit; background:var(--card);
+           border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:12px;
+           transition:border-color .15s, transform .1s; }
+  a.card:active { transform:scale(.99); border-color:var(--accent); }
+  .name { font-size:17px; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; color:var(--accent); border:1px solid rgba(240,196,25,.4);
+         border-radius:6px; padding:1px 6px; margin-left:8px; vertical-align:2px; }
+  .desc { color:var(--dim); font-size:13px; margin-top:6px; }
+  footer { color:#5c6675; font-size:12px; margin-top:26px; line-height:1.8; }
+  footer a { color:#7d8899; }
+</style>
+</head>
+<body>
+  <h1>赛车原型</h1>
+  <p class="sub">2026-11-19 通宵做的三个版本，点开就能玩</p>
+
+  <a class="card" href="games/pixel-racer.html">
+    <div class="name">像素赛车 · 漂移版<span class="tag">2D 竖屏</span></div>
+    <div class="desc">纯 Canvas 绘制，零依赖。漂移攒氮气，手感基准在这一版。</div>
+  </a>
+
+  <a class="card" href="games/neon-racer-3d.html">
+    <div class="name">霓虹飞车 3D<span class="tag">3D</span></div>
+    <div class="desc">Three.js 全局构建版，发光带靠 CanvasTexture 现画，不吃性能。</div>
+  </a>
+
+  <a class="card" href="games/road-racer-3d.html">
+    <div class="name">公路飞驰 3D<span class="tag">3D</span></div>
+    <div class="desc">ES Module + ACES 色调映射，傍晚公路观感，最接近成品的一版。</div>
+  </a>
+
+  <footer>
+    键盘方向键或 WASD 控制，触屏也能按。<br>
+    研究记录与待办在 <a href="INDEX.md">INDEX.md</a>，源码在 <a href="https://github.com/coolamoo/amoo-game-research">GitHub</a>。
+  </footer>
+</body>
+</html>
