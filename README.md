@@ -1,5 +1,8 @@
 # 赛车游戏原型研究（game-lab）
 
+> **先读 [`INDEX.md`](INDEX.md)。** 那是这个仓库的记忆索引：想查什么、去哪看、现状快照、维护规则。
+> 本文件是项目说明，INDEX 是导航。
+
 给"以后的我"看的项目主页：这里放过什么、当时怎么想的、下一次从哪继续。
 
 - 起始：2026-11-19 凌晨 03:27 — 04:41，一个通宵做出三个可玩原型
@@ -60,6 +63,6 @@ cd game-research && python3 -m http.server 8080
 
 ## 六、怎么用这个仓库
 
-- 每次重新捡起这个项目，先读 `docs/timeline.md`（当时的时间线）和 `docs/tech-notes.md`（技术细节），再看 `docs/next-steps.md` 挑一件事做。
+- 每次重新捡起这个项目，先读 `INDEX.md`（导航），再按它指的路走：`docs/timeline.md`（时间线）→ `docs/tech-notes.md`（技术细节）→ `docs/next-steps.md`（挑一件事）。
 - 做完一件事，往 `docs/next-steps.md` 里划掉并把结论补进 `docs/tech-notes.md`。
 - 原型不删，做新版本另存（`pixel-racer-v2.html` 这种），保留可对照的旧版本。
