@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>像素赛车 · 漂移版</title>
+<style>
+  html,body{height:100%;margin:0;background:#0b0d10;color:#e7ecef;font-family:-apple-system,Roboto,"PingFang SC","Microsoft YaHei",sans-serif;overscroll-behavior:none}
+  canvas{touch-action:none;user-select:none;-webkit-user-select:none;image-rendering:pixelated;display:block;width:100%;height:auto;border-radius:12px}
+  .wrap{max-width:520px;margin:0 auto;padding:10px}
+  .hud{display:flex;gap:8px;margin-bottom:8px;font-variant-numeric:tabular-nums}
+  .card{background:#15191d;border:1px solid #262d33;border-radius:10px;padding:6px 10px;flex:1;text-align:center}
+  .k{font-size:10px;color:#8b9499;letter-spacing:.5px}
+  .v{font-size:19px;font-weight:800}
+  .stage{position:relative;border:1px solid #262d33;border-radius:12px;overflow:hidden;background:#111}
+  .bar{position:absolute;left:10px;right:10px;bottom:10px;height:10px;background:#0d1114;border:1px solid #2b333a;border-radius:6px;overflow:hidden}
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2f7cf6,#4fd1ff);transition:width .08s linear}
+  .bar.ready > i{background:linear-gradient(90deg,#ffb300,#ffe066)}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(8,10,12,.86);text-align:center;padding:16px}
+  .overlay.hide{display:none}
+  .btn{background:#1f6feb;border:none;color:#fff;font-weight:800;border-radius:10px;padding:12px 22px;font-size:16px}
+  .btn:active{filter:brightness(1.15)}
+  .btn.ghost{background:#20262b;border:1px solid #2b333a}
+  .sub{color:#8b9499;font-size:13px;line-height:1.6}
+  .board{width:100%;max-width:280px;text-align:left;font-variant-numeric:tabular-nums}
+  .board div{display:flex;justify-content:space-between;font-size:13px;color:#b9c2c8;padding:3px 6px;border-radius:6px}
+  .board div.me{background:#1d2a3a;color:#e7ecef}
+  input.name{background:#15191d;border:1px solid #2b333a;color:#e7ecef;border-radius:10px;padding:10px 12px;font-size:15px;width:170px;text-align:center}
+  .pad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+  .pad button{background:#1b2126;border:1px solid #2b333a;color:#e7ecef;border-radius:12px;padding:16px 0;font-size:18px;font-weight:800}
+  .pad button:active{background:#2a333b}
+  .pad button.nitro{background:#12314f;border-color:#1f6feb}
+  .pad button.drift{background:#3a2a12;border-color:#8a6a00}
+</style>
+</head>
+<body>
+<!-- #region 结构 -->
+<div class="wrap">
+  <div class="hud">
+    <div class="card"><div class="k">分数</div><div class="v"><span id="score">0</span></div></div>
+    <div class="card"><div class="k">时速</div><div class="v"><span id="kmh">0</span><span style="font-size:11px;color:#8b9499"> km/h</span></div></div>
+    <div class="card"><div class="k">漂移</div><div class="v" id="driftHud" style="color:#ffb300">0</div></div>
+  </div>
+
+  <div class="stage">
+    <canvas id="cv" width="320" height="560"></canvas>
+    <div class="bar" id="nitroBar"><i></i></div>
+    <div class="overlay" id="overlay">
+      <div id="title" style="font-size:26px;font-weight:900;letter-spacing:3px">像素赛车</div>
+      <div class="sub" id="tips">← → 转向　␣ 氮气　Shift 漂移<br>手机用下方四个键，也可左右滑动转向</div>
+      <button class="btn" id="startBtn">开始</button>
+      <div class="board" id="boardMini"></div>
+    </div>
+  </div>
+
+  <div class="pad">
+    <button id="padL">◀</button>
+    <button id="padR">▶</button>
+    <button id="padDrift" class="drift">漂移</button>
+    <button id="padNitro" class="nitro">氮气</button>
+  </div>
+</div>
+<!-- #endregion -->
+
+<script>
+(function () {
+  'use strict';
+
+  // ===== CONFIG =====
+  var CONFIG = {
+    W: 320, H: 560,
+    laneCount: 3,
+    roadW: 244,
+    carW: 26, carH: 42,
+    // 速度
+    speed0: 300, speedMax: 980, speedGain: 10,
+    // 操控
+    steerAccel: 1500, latMax: 300,
+    gripNormal: 9, gripDrift: 2.4,
+    yawMax: 0.42,
+    // 漂移计分
+    driftMinSpeed: 380, driftRate: 0.55, nitroPerDrift: 0.34,
+    // 氮气
+    nitroTime: 2.0, nitroBoost: 1.55, nitroMin: 0.25,
+    // 出车
+    spawnStart: 1.0, spawnMin: 0.42,
+    playerY: 0.78,
+    skidMax: 320,
+    colors: {
+      grass: '#1b2b1f', grassAlt: '#223528',
+      road: '#282d34', edge: '#3a434c', dash: '#dfe5ea',
+      player: '#e8b100', playerDark: '#7f6100', playerGlass: '#1d2833',
+      enemy: ['#d64545', '#3f7fd6', '#46b06a', '#c07ad6', '#d98b3a', '#4ec6c6'],
+      tree: '#14261a', treeTop: '#1d4026',
+      skid: 'rgba(20,22,26,.55)'
+    }
+  };
+
+  // ===== STATE =====
+  var state = {
+    running: false, over: false,
+    speed: CONFIG.speed0, x: CONFIG.W / 2, lat: 0, yaw: 0,
+    drifting: false, driftScore: 0, driftCombo: 0,
+    nitro: 0, nitroActive: 0,
+    dist: 0, scroll: 0, spawnTimer: 0,
+    cars: [], skids: [],
+    best: 0, board: [],
+    lastTs: 0, acc: 0, shake: 0, flash: 0
+  };
+
+  // ===== DOM =====
+  var dom = {};
+  var cv, ctx;
+
+  // ===== UTILS =====
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function roadLeft() { return (CONFIG.W - CONFIG.roadW) / 2; }
+  function load(key, dflt) {
+    try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : dflt; } catch (e) { return dflt; }
+  }
+  function save(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {} }
+
+  // ===== RENDER =====
+  function resize() {
+    var cssW = cv.clientWidth || CONFIG.W;
+    var dpr = Math.min(window.devicePixelRatio || 1, 3);
+    var cssH = cssW * (CONFIG.H / CONFIG.W);
+    cv.style.height = cssH + 'px';
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssH * dpr);
+    ctx.setTransform(cv.width / CONFIG.W, 0, 0, cv.height / CONFIG.H, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    draw();
+  }
+
+  function drawCar(x, y, w, h, ang, body, dark, glass, flame) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.fillStyle = 'rgba(0,0,0,.30)';
+    ctx.fillRect(-w / 2 + 2, -h / 2 + 4, w, h);
+    ctx.fillStyle = body;
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.fillStyle = dark;
+    ctx.fillRect(-w / 2, -h / 2, w, 5);
+    ctx.fillRect(-w / 2, h / 2 - 5, w, 5);
+    ctx.fillStyle = glass;
+    ctx.fillRect(-w / 2 + 4, -h / 2 + 9, w - 8, 10);
+    ctx.fillRect(-w / 2 + 4, h / 2 - 21, w - 8, 7);
+    ctx.fillStyle = '#11161a';
+    ctx.fillRect(-w / 2 - 3, -h / 2 + 7, 3, 11);
+    ctx.fillRect(w / 2, -h / 2 + 7, 3, 11);
+    ctx.fillRect(-w / 2 - 3, h / 2 - 18, 3, 11);
+    ctx.fillRect(w / 2, h / 2 - 18, 3, 11);
+    if (flame) {
+      var f = 8 + Math.random() * 10;
+      ctx.fillStyle = '#5ec8ff';
+      ctx.fillRect(-6, h / 2, 5, f);
+      ctx.fillRect(1, h / 2, 5, f);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-5, h / 2, 3, f * 0.55);
+      ctx.fillRect(2, h / 2, 3, f * 0.55);
+    }
+    ctx.restore();
+  }
+
+  function draw() {
+    var W = CONFIG.W, H = CONFIG.H, C = CONFIG.colors, rl = roadLeft(), rw = CONFIG.roadW;
+    ctx.save();
+    if (state.shake > 0) {
+      ctx.translate((Math.random() - .5) * state.shake, (Math.random() - .5) * state.shake);
+    }
+
+    // 草地
+    ctx.fillStyle = C.grass;
+    ctx.fillRect(-10, -10, W + 20, H + 20);
+    ctx.fillStyle = C.grassAlt;
+    for (var y = -((state.scroll * 0.6) % 40); y < H; y += 40) {
+      ctx.fillRect(0, Math.floor(y), rl, 4);
+      ctx.fillRect(rl + rw, Math.floor(y), rl, 4);
+    }
+    // 路边树
+    var span = 96, off = (state.scroll * 0.9) % span;
+    for (var ty = -off; ty < H + span; ty += span) {
+      var t = Math.floor(ty);
+      ctx.fillStyle = C.tree;
+      ctx.fillRect(12, t, 24, 20);
+      ctx.fillRect(rl - 30, t + 34, 22, 18);
+      ctx.fillStyle = C.treeTop;
+      ctx.fillRect(16, t - 9, 15, 11);
+      ctx.fillRect(rl - 26, t + 25, 13, 10);
+    }
+
+    // 路面
+    ctx.fillStyle = C.road;
+    ctx.fillRect(rl, -10, rw, H + 20);
+    ctx.fillStyle = C.edge;
+    ctx.fillRect(rl, -10, 4, H + 20);
+    ctx.fillRect(rl + rw - 4, -10, 4, H + 20);
+
+    // 车道虚线
+    var lw = rw / CONFIG.laneCount;
+    ctx.fillStyle = C.dash;
+    for (var i = 1; i < CONFIG.laneCount; i++) {
+      var dx = rl + lw * i - 2;
+      for (var dy = -(state.scroll % 60); dy < H; dy += 60) {
+        ctx.fillRect(dx, Math.floor(dy), 4, 30);
+      }
+    }
+
+    // 胎痕
+    for (var s = 0; s < state.skids.length; s++) {
+      var k = state.skids[s];
+      ctx.fillStyle = 'rgba(18,20,24,' + k.a.toFixed(2) + ')';
+      ctx.fillRect(k.x - 1.5, k.y, 3, 7);
+    }
+
+    // 敌车
+    for (var c = 0; c < state.cars.length; c++) {
+      var e = state.cars[c];
+      drawCar(e.x, e.y, CONFIG.carW, CONFIG.carH, 0, e.color, '#00000055', '#1b2530', false);
+    }
+
+    // 玩家
+    drawCar(state.x, H * CONFIG.playerY, CONFIG.carW + 2, CONFIG.carH + 2, state.yaw,
+      C.player, C.playerDark, C.playerGlass, state.nitroActive > 0);
+
+    // 速度线
+    var sp = (state.speed - CONFIG.speed0) / (CONFIG.speedMax - CONFIG.speed0);
+    var lines = state.nitroActive > 0 ? 26 : Math.floor(sp * 12);
+    ctx.fillStyle = 'rgba(255,255,255,' + (state.nitroActive > 0 ? 0.5 : 0.22) + ')';
+    for (var l = 0; l < lines; l++) {
+      var lx = rl + Math.random() * rw;
+      var ly = Math.random() * H;
+      ctx.fillRect(lx, ly, 2, 18 + Math.random() * 26);
+    }
+
+    // 氮气白闪
+    if (state.flash > 0) {
+      ctx.fillStyle = 'rgba(200,235,255,' + (state.flash * 0.5).toFixed(2) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function updateHud() {
+    dom.score.textContent = Math.floor(state.dist + state.driftScore);
+    dom.kmh.textContent = Math.round(state.speed / 8 * (state.nitroActive > 0 ? 1 : 1));
+    dom.driftHud.textContent = Math.floor(state.driftCombo);
+    var pct = Math.round(state.nitro * 100);
+    dom.nitroBar.querySelector('i').style.width = pct + '%';
+    dom.nitroBar.className = 'bar' + (state.nitro >= CONFIG.nitroMin ? ' ready' : '');
+  }
+
+  // ===== LOGIC =====
+  function reset() {
+    state.running = true; state.over = false;
+    state.speed = CONFIG.speed0; state.x = CONFIG.W / 2; state.lat = 0; state.yaw = 0;
+    state.drifting = false; state.driftScore = 0; state.driftCombo = 0;
+    state.nitro = 0; state.nitroActive = 0;
+    state.dist = 0; state.scroll = 0; state.spawnTimer = 0;
+    state.cars = []; state.skids = [];
+    state.acc = 0; state.lastTs = 0; state.shake = 0; state.flash = 0;
+    dom.overlay.classList.add('hide');
+    updateHud();
+  }
+
+  function spawn() {
+    var lane = Math.floor(Math.random() * CONFIG.laneCount);
+    var lw = CONFIG.roadW / CONFIG.laneCount;
+    var x = roadLeft() + lw * (lane + 0.5);
+    var rel = state.speed * (0.42 + Math.random() * 0.4);
+    state.cars.push({
+      x: x, y: -CONFIG.carH, rel: rel,
+      color: CONFIG.colors.enemy[Math.floor(Math.random() * CONFIG.colors.enemy.length)]
+    });
+  }
+
+  function startNitro() {
+    if (!state.running) return;
+    if (state.nitro < CONFIG.nitroMin) return;
+    state.nitroActive = CONFIG.nitroTime;
+    state.nitro = Math.max(0, state.nitro - CONFIG.nitroMin);
+    state.flash = 0.5; state.shake = 5;
+  }
+
+  function gameOver() {
+    state.running = false; state.over = true;
+    var total = Math.floor(state.dist + state.driftScore);
+    var qualified = total > 0 && (state.board.length < 8 || total > state.board[state.board.length - 1].score);
+    showOver(total, qualified);
+  }
+
+  function showOver(total, qualified) {
+    dom.overlay.classList.remove('hide');
+    dom.title.textContent = '撞车了';
+    dom.tips.innerHTML = '总分 <b style="color:#e8b100;font-size:18px">' + total + '</b>　' +
+      '（里程 ' + Math.floor(state.dist) + ' + 漂移 ' + Math.floor(state.driftScore) + '）';
+    dom.boardMini.innerHTML = renderBoard(-1);
+
+    var wrap = document.getElementById('nameWrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'nameWrap';
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;align-items:center';
+      wrap.innerHTML = '<input class="name" id="nameInput" maxlength="8" placeholder="留个名">' +
+                       '<button class="btn" id="saveBtn">保存成绩</button>';
+      dom.overlay.insertBefore(wrap, dom.boardMini || null);
+      document.getElementById('saveBtn').addEventListener('click', function () {
+        var n = (document.getElementById('nameInput').value || '无名车手').slice(0, 8);
+        pushScore(n, total);
+      });
+    }
+    wrap.style.display = qualified ? 'flex' : 'none';
+    document.getElementById('nameInput').value = load('pixelracer.name', '');
+    dom.startBtn.textContent = qualified ? '不保存，再来一局' : '再来一局';
+    dom.startBtn.onclick = function () { dom.title.textContent = '像素赛车'; reset(); };
+  }
+
+  function pushScore(name, total) {
+    state.board.push({ name: name, score: total });
+    state.board.sort(function (a, b) { return b.score - a.score; });
+    state.board = state.board.slice(0, 8);
+    save('pixelracer.board', state.board);
+    save('pixelracer.name', name);
+    document.getElementById('nameWrap').style.display = 'none';
+    dom.boardMini.innerHTML = renderBoard(0);
+    dom.tips.innerHTML = '已记入排行榜';
+  }
+
+  function renderBoard(highlight) {
+    if (!state.board.length) return '<div style="justify-content:center;color:#6a737a">还没有成绩</div>';
+    var h = '';
+    for (var i = 0; i < state.board.length; i++) {
+      var b = state.board[i];
+      h += '<div class="' + (i === highlight ? 'me' : '') + '"><span>' + (i + 1) + '. ' + escapeHtml(b.name) +
+           '</span><span>' + b.score + '</span></div>';
+    }
+    return h;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function update(dt) {
+    if (!state.running) {
+      if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 20);
+      if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 2);
+      return;
+    }
+
+    // 漂移状态
+    state.drifting = !!actions.drift && Math.abs(state.lat) > 20 && state.speed > CONFIG.driftMinSpeed;
+
+    // 氮气
+    if (state.nitroActive > 0) {
+      state.nitroActive = Math.max(0, state.nitroActive - dt);
+      state.shake = 3;
+    } else {
+      state.shake = Math.max(0, state.shake - dt * 18);
+    }
+    if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 2.2);
+
+    // 速度
+    var boost = state.nitroActive > 0 ? CONFIG.nitroBoost : 1;
+    var targetSpeed = state.speed + CONFIG.speedGain * dt;
+    state.speed = Math.min(CONFIG.speedMax * boost, targetSpeed * (state.nitroActive > 0 ? 1.002 : 1));
+    if (state.nitroActive <= 0 && state.speed > CONFIG.speedMax) state.speed = CONFIG.speedMax;
+
+    // 转向
+    var steer = (actions.right ? 1 : 0) - (actions.left ? 1 : 0);
+    state.lat += steer * CONFIG.steerAccel * dt;
+    var grip = state.drifting ? CONFIG.gripDrift : CONFIG.gripNormal;
+    state.lat -= state.lat * Math.min(1, grip * dt);
+    state.lat = clamp(state.lat, -CONFIG.latMax, CONFIG.latMax);
+    state.x += state.lat * dt;
+
+    // 赛道边界
+    var rl = roadLeft(), rw = CONFIG.roadW;
+    var minX = rl + CONFIG.carW * 0.7, maxX = rl + rw - CONFIG.carW * 0.7;
+    if (state.x < minX) { state.x = minX; state.lat = Math.abs(state.lat) * 0.35; state.speed *= 0.985; }
+    if (state.x > maxX) { state.x = maxX; state.lat = -Math.abs(state.lat) * 0.35; state.speed *= 0.985; }
+
+    // 车头角度
+    var targetYaw = state.drifting ? clamp(state.lat / CONFIG.latMax, -1, 1) * CONFIG.yawMax
+                                   : clamp(state.lat / CONFIG.latMax, -1, 1) * CONFIG.yawMax * 0.28;
+    state.yaw += (targetYaw - state.yaw) * Math.min(1, 12 * dt);
+
+    // 漂移计分 / 氮气
+    if (state.drifting) {
+      var gain = Math.abs(state.lat) * dt * CONFIG.driftRate;
+      state.driftScore += gain;
+      state.driftCombo += gain;
+      state.nitro = Math.min(1, state.nitro + gain * CONFIG.nitroPerDrift * 0.02 + dt * 0.15);
+    } else {
+      state.driftCombo = 0;
+      state.nitro = Math.min(1, state.nitro + dt * 0.012);
+    }
+
+    // 滚动与里程
+    state.scroll += state.speed * dt;
+    state.dist += state.speed * dt / 8;
+
+    // 胎痕
+    if (state.drifting && Math.random() < 0.7) {
+      state.skids.push({ x: state.x - 9, y: CONFIG.H * CONFIG.playerY + 12, a: 0.55 });
+      state.skids.push({ x: state.x + 9, y: CONFIG.H * CONFIG.playerY + 12, a: 0.55 });
+    }
+    for (var i = state.skids.length - 1; i >= 0; i--) {
+      state.skids[i].y += state.speed * dt;
+      state.skids[i].a -= dt * 0.32;
+      if (state.skids[i].y > CONFIG.H + 10 || state.skids[i].a <= 0.02) state.skids.splice(i, 1);
+    }
+    if (state.skids.length > CONFIG.skidMax) state.skids.splice(0, state.skids.length - CONFIG.skidMax);
+
+    // 出车
+    state.spawnTimer -= dt;
+    if (state.spawnTimer <= 0) {
+      spawn();
+      var t = clamp(1 - (state.speed - CONFIG.speed0) / (CONFIG.speedMax - CONFIG.speed0), 0, 1);
+      state.spawnTimer = CONFIG.spawnMin + (CONFIG.spawnStart - CONFIG.spawnMin) * t;
+    }
+    for (var j = 0; j < state.cars.length; j++) {
+      state.cars[j].y += (state.speed - state.cars[j].rel) * dt;
+    }
+    state.cars = state.cars.filter(function (c) { return c.y < CONFIG.H + CONFIG.carH; });
+
+    // 碰撞
+    var py = CONFIG.H * CONFIG.playerY;
+    var hw = CONFIG.carW * 0.46, hh = CONFIG.carH * 0.46;
+    for (var k = 0; k < state.cars.length; k++) {
+      var e = state.cars[k];
+      if (Math.abs(e.x - state.x) < hw * 2 && Math.abs(e.y - py) < hh * 2) {
+        state.shake = 12;
+        gameOver();
+        return;
+      }
+    }
+
+    updateHud();
+  }
+
+  function loop(ts) {
+    if (!state.lastTs) state.lastTs = ts;
+    var dt = (ts - state.lastTs) / 1000;
+    state.lastTs = ts;
+    if (dt > 0.25) dt = 0.25;
+    state.acc += dt;
+    var step = 1 / 60;
+    var guard = 0;
+    while (state.acc >= step && guard++ < 8) { update(step); state.acc -= step; }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ===== INPUT =====
+  var actions = { left: false, right: false, drift: false };
+
+  function bindKeyboard() {
+    window.addEventListener('keydown', function (e) {
+      var k = e.key;
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') { actions.left = true; e.preventDefault(); }
+      if (k === 'ArrowRight' || k === 'd' || k === 'D') { actions.right = true; e.preventDefault(); }
+      if (k === 'Shift') { actions.drift = true; }
+      if (k === ' ') { startNitro(); e.preventDefault(); }
+      if ((k === 'Enter') && !state.running) { reset(); }
+    });
+    window.addEventListener('keyup', function (e) {
+      var k = e.key;
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') actions.left = false;
+      if (k === 'ArrowRight' || k === 'd' || k === 'D') actions.right = false;
+      if (k === 'Shift') actions.drift = false;
+    });
+  }
+
+  function hold(el, on, off) {
+    el.addEventListener('pointerdown', function (e) { e.preventDefault(); on(); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+      el.addEventListener(ev, function () { if (off) off(); });
+    });
+  }
+
+  function bindTouch() {
+    hold(dom.padL, function () { actions.left = true; }, function () { actions.left = false; });
+    hold(dom.padR, function () { actions.right = true; }, function () { actions.right = false; });
+    hold(dom.padDrift, function () { actions.drift = true; }, function () { actions.drift = false; });
+    hold(dom.padNitro, startNitro, null);
+
+    // 画面上左右滑动 = 点按转向
+    var stage = document.querySelector('.stage'), sx = null;
+    stage.addEventListener('pointerdown', function (e) { sx = e.clientX; });
+    stage.addEventListener('pointerup', function (e) {
+      if (sx === null) return;
+      var d = e.clientX - sx;
+      if (Math.abs(d) > 26) {
+        actions[d > 0 ? 'right' : 'left'] = true;
+        setTimeout(function () { actions.left = actions.right = false; }, 220);
+      }
+      sx = null;
+    });
+  }
+
+  // ===== INIT =====
+  function init() {
+    dom.cv = document.getElementById('cv');
+    dom.overlay = document.getElementById('overlay');
+    dom.title = document.getElementById('title');
+    dom.tips = document.getElementById('tips');
+    dom.startBtn = document.getElementById('startBtn');
+    dom.boardMini = document.getElementById('boardMini');
+    dom.score = document.getElementById('score');
+    dom.kmh = document.getElementById('kmh');
+    dom.driftHud = document.getElementById('driftHud');
+    dom.nitroBar = document.getElementById('nitroBar');
+    dom.padL = document.getElementById('padL');
+    dom.padR = document.getElementById('padR');
+    dom.padDrift = document.getElementById('padDrift');
+    dom.padNitro = document.getElementById('padNitro');
+
+    cv = dom.cv;
+    ctx = cv.getContext('2d');
+
+    state.board = load('pixelracer.board', []);
+    state.scroll = 0;
+    updateHud();
+    resize();
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+    bindKeyboard();
+    bindTouch();
+    dom.boardMini.innerHTML = renderBoard(-1);
+
+    dom.startBtn.onclick = function () { dom.title.textContent = '像素赛车'; reset(); };
+    document.addEventListener('visibilitychange', function () {
+      state.lastTs = 0;
+      actions.left = actions.right = actions.drift = false;
+    });
+
+    requestAnimationFrame(loop);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
